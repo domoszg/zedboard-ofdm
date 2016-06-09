@@ -8,9 +8,9 @@ entity xillydemo is
     -- For Vivado, delete the port declarations for PS_CLK, PS_PORB and
     -- PS_SRSTB, and uncomment their declarations as signals further below.
 
-    PS_CLK : IN std_logic;
-    PS_PORB : IN std_logic;
-    PS_SRSTB : IN std_logic;
+    --PS_CLK : IN std_logic;
+    --PS_PORB : IN std_logic;
+    --PS_SRSTB : IN std_logic;
     clk_100 : IN std_logic;
     otg_oc : IN std_logic;
     PS_GPIO : INOUT std_logic_vector(55 DOWNTO 0);
@@ -344,9 +344,9 @@ architecture sample_arch of xillydemo is
   -- implementation, but has no practical significance, as these pads are
   -- completely unrelated to the FPGA bitstream.
 
-  -- signal PS_CLK :  std_logic;
-  -- signal PS_PORB :  std_logic;
-  -- signal PS_SRSTB :  std_logic;
+  signal PS_CLK :  std_logic;
+  signal PS_PORB :  std_logic;
+  signal PS_SRSTB :  std_logic;
   signal DDR_Addr : std_logic_vector(14 DOWNTO 0);
   signal DDR_BankAddr : std_logic_vector(2 DOWNTO 0);
   signal DDR_CAS_n : std_logic;
@@ -405,6 +405,10 @@ architecture sample_arch of xillydemo is
   signal dft_sclr : std_logic;
   
   signal dft_out : std_logic_vector(31 downto 0);
+  
+  -- DEBUG
+  signal led_sig : std_logic;
+  signal led_cnt : std_logic_vector(7 downto 0);
   
 begin
   xillybus_ins : xillybus
@@ -514,7 +518,8 @@ begin
       DDR_VRN => DDR_VRN,
       DDR_VRP => DDR_VRP,
       MIO => MIO,
-      PS_GPIO => PS_GPIO,
+      --PS_GPIO => PS_GPIO,
+      PS_GPIO => open,
       DDR_WEB => DDR_WEB,
       GPIO_LED => GPIO_LED,
       bus_clk => bus_clk,
@@ -661,7 +666,6 @@ begin
   dft_out_I <= dft_out(31 downto 16);
   dft_out_Q <= dft_out(15 downto 0);
   
-    
   dft_16_I : dft_16
     PORT MAP (
       CLK         => bus_clk,
@@ -683,6 +687,20 @@ begin
     );
     
     dft_sclr <= '0';
+    
+    PS_GPIO <= (55 downto 11 => '0', 10 => led_sig, 9 downto 0 => '0');
+    process(dft_fd_out)
+      begin
+        if rising_edge(dft_fd_out) then
+          if led_cnt /= (led_cnt'range => '0') then 
+            led_cnt <= x"ff";
+            led_sig <= not led_sig;
+          else
+            led_cnt <= led_cnt - '1';
+            led_sig <= led_sig;
+          end if;
+        end if;
+      end process;
   
 --  8-bit loopback
 
