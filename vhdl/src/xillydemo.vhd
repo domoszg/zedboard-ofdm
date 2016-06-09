@@ -136,9 +136,37 @@ architecture sample_arch of xillydemo is
     );
     end component;
     
+    component dft_in_fsm
+    port (
+      reset : in std_logic;
+      clk : in std_logic;
+      fifo_data : in std_logic_vector(31 downto 0);
+      fifo_rd_en : out std_logic;
+      fifo_rd_count : in std_logic_vector(9 downto 0);
+      dft_data : out std_logic_vector(31 downto 0);
+      dft_fd_in : out std_logic;
+      dft_rffd : in std_logic;
+      dft_data_valid : in std_logic
+    );
+    end component;
+    
+    component dft_out_fsm
+    port (
+      reset : in std_logic;
+      clk : in std_logic;
+      dft_ce : out std_logic;
+      dft_dout : in std_logic_vector(31 downto 0);
+      dft_fd_out : in std_logic;
+      fifo_data : out std_logic_vector(31 downto 0);
+      fifo_wr_en : out std_logic;
+      fifo_wr_count : in std_logic_vector(9 downto 0)
+    );
+    end component;
+    
     COMPONENT dft_16
       PORT (
         CLK : IN STD_LOGIC;
+        CE : IN STD_LOGIC;
         SCLR : IN STD_LOGIC;
         XN_RE : IN STD_LOGIC_VECTOR(15 DOWNTO 0);
         XN_IM : IN STD_LOGIC_VECTOR(15 DOWNTO 0);
@@ -339,8 +367,12 @@ architecture sample_arch of xillydemo is
   signal DDR_WEB : std_logic;
   
   
-  -- Signali za cyclic prefix FSM 
-  signal cyclic_fsm_reset : std_logic;
+  -- Signali za input FSM 
+  signal input_fsm_reset : std_logic;
+  
+  -- Signali za output FSM
+  signal output_fsm_reset : std_logic;
+  signal output_fsm_dft_ce : std_logic;
   
   
   -- Signali za ulazni FIFO
@@ -349,6 +381,14 @@ architecture sample_arch of xillydemo is
   signal fifo_in_reset : std_logic;
   signal fifo_in_empty : std_logic;
   signal fifo_read_count : std_logic_vector(9 downto 0);
+  
+  
+  -- Signali za izlazni FIFO
+  signal fifo_write_data : std_logic_vector(31 downto 0);
+  signal fifo_write_wr_en : std_logic;
+  signal fifo_out_reset : std_logic;
+  signal fifo_out_full : std_logic;
+  signal fifo_write_count : std_logic_vector(9 downto 0);
   
   
   -- Signali za DFT IP core
@@ -363,6 +403,8 @@ architecture sample_arch of xillydemo is
   signal dft_data_valid : std_logic;
   signal dft_rffd : std_logic;
   signal dft_sclr : std_logic;
+  
+  signal dft_out : std_logic_vector(31 downto 0);
   
 begin
   xillybus_ins : xillybus
@@ -570,34 +612,69 @@ begin
   
   fifo_in_reset <= '0';
   
-  
-  -- The cyclic_prefix_fsm waits for valid data on FIFO read
-  -- and stripes the cyclic prefix from each OFDM symbol
-  cyclic_fsm : cyclic_prefix_fsm
-  port map (
-    reset          => cyclic_fsm_reset,
-    clk            => bus_clk,
-    din            => fifo_read_data,
-    rd_en          => fifo_read_rd_en,
-    fifo_rd_count  => fifo_read_count,
-    dout           => dft_data_in,
-    fd_out         => dft_fd_in,
-    rffd           => dft_rffd,
-	dft_data_valid => dft_data_valid
+  -- OUTPUT FIFO
+  fifo_out : fifo_32x1024
+  port map(
+     clk        => bus_clk,
+     srst       => fifo_out_reset,
+     din        => fifo_write_data,
+     wr_en      => fifo_write_wr_en,
+     rd_en      => user_r_read_32_rden,
+     dout       => user_r_read_32_data,
+     full       => fifo_out_full,
+     empty      => user_r_read_32_empty,
+     data_count => fifo_write_count
   );
   
-  cyclic_fsm_reset <= '0';
+  fifo_out_reset <= '0';
   
+  
+  input_fsm : dft_in_fsm
+  port map (
+    reset          => input_fsm_reset,
+    clk            => bus_clk,
+    fifo_data      => fifo_read_data,
+    fifo_rd_en     => fifo_read_rd_en,
+    fifo_rd_count  => fifo_read_count,
+    dft_data       => dft_data_in,
+    dft_fd_in      => dft_fd_in,
+    dft_rffd       => dft_rffd,
+    dft_data_valid => dft_data_valid
+  );
+  
+  input_fsm_reset <= '0';
+  
+  
+  output_fsm : dft_out_fsm
+  port map (
+    reset          => output_fsm_reset,
+    clk            => bus_clk,
+    dft_ce         => output_fsm_dft_ce,
+    dft_dout       => dft_out, 
+    dft_fd_out     => dft_fd_out,
+    fifo_data      => fifo_write_data,
+    fifo_wr_en     => fifo_write_wr_en,
+    fifo_wr_count  => fifo_write_count
+  );
+  
+  output_fsm_reset <= '0';
+  dft_out_I <= dft_out(31 downto 16);
+  dft_out_Q <= dft_out(15 downto 0);
+  
+    
   dft_16_I : dft_16
     PORT MAP (
       CLK         => bus_clk,
       SCLR        => dft_sclr,
+      CE          => output_fsm_dft_ce,
+      SIZE        => dft_size_const,
+      FWD_INV     => '1',
+      -- Vremenska domena
       XN_RE       => dft_data_in(31 downto 16),
       XN_IM       => dft_data_in(15 downto 0),
       FD_IN       => dft_fd_in,
-      FWD_INV     => '1',
-      SIZE        => dft_size_const,
       RFFD        => dft_rffd,
+      -- Frekvencijska domena
       XK_RE       => dft_out_I,
       XK_IM       => dft_out_Q,
       BLK_EXP     => dft_out_blk_exp,
