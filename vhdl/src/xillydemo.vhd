@@ -146,7 +146,8 @@ architecture sample_arch of xillydemo is
       dft_data : out std_logic_vector(31 downto 0);
       dft_fd_in : out std_logic;
       dft_rffd : in std_logic;
-      dft_data_valid : in std_logic
+      dft_data_valid : in std_logic;
+      fifo_watchdog_reset : out std_logic
     );
     end component;
     
@@ -159,7 +160,8 @@ architecture sample_arch of xillydemo is
       dft_fd_out : in std_logic;
       fifo_data : out std_logic_vector(31 downto 0);
       fifo_wr_en : out std_logic;
-      fifo_wr_count : in std_logic_vector(9 downto 0)
+      fifo_wr_count : in std_logic_vector(9 downto 0);
+      fifo_watchdog_reset : out std_logic
     );
     end component;
     
@@ -181,6 +183,15 @@ architecture sample_arch of xillydemo is
         DATA_VALID : OUT STD_LOGIC
       );
     END COMPONENT;
+    
+    component reset_controller
+    port (
+      clk : in std_logic;
+      input_fsm_wd_reset : in std_logic;
+      output_fsm_wd_reset : in std_logic;
+      reset : out std_logic
+    );
+    end component;
 
   component fifo_8x2048
     port (
@@ -406,9 +417,16 @@ architecture sample_arch of xillydemo is
   
   signal dft_out : std_logic_vector(31 downto 0);
   
+  -- Reset controller signals
+  signal controller_reset : std_logic;
+  signal input_fsm_wd_reset : std_logic;
+  signal output_fsm_wd_reset : std_logic;
+  
   -- DEBUG
   signal led_sig : std_logic;
   signal led_cnt : std_logic_vector(7 downto 0);
+  signal dft_fd_out_prev : std_logic := dft_fd_out;
+  signal PS_GPIO_xillybus : std_logic_vector(55 downto 0);
   
 begin
   xillybus_ins : xillybus
@@ -518,8 +536,7 @@ begin
       DDR_VRN => DDR_VRN,
       DDR_VRP => DDR_VRP,
       MIO => MIO,
-      --PS_GPIO => PS_GPIO,
-      PS_GPIO => open,
+      PS_GPIO => PS_GPIO_xillybus,
       DDR_WEB => DDR_WEB,
       GPIO_LED => GPIO_LED,
       bus_clk => bus_clk,
@@ -615,7 +632,7 @@ begin
      data_count => fifo_read_count
   );
   
-  fifo_in_reset <= '0';
+  fifo_in_reset <= controller_reset;
   
   -- OUTPUT FIFO
   fifo_out : fifo_32x1024
@@ -631,7 +648,7 @@ begin
      data_count => fifo_write_count
   );
   
-  fifo_out_reset <= '0';
+  fifo_out_reset <= controller_reset;
   
   
   input_fsm : dft_in_fsm
@@ -644,10 +661,11 @@ begin
     dft_data       => dft_data_in,
     dft_fd_in      => dft_fd_in,
     dft_rffd       => dft_rffd,
-    dft_data_valid => dft_data_valid
+    dft_data_valid => dft_data_valid,
+    fifo_watchdog_reset => input_fsm_wd_reset
   );
   
-  input_fsm_reset <= '0';
+  input_fsm_reset <= controller_reset;
   
   
   output_fsm : dft_out_fsm
@@ -659,10 +677,11 @@ begin
     dft_fd_out     => dft_fd_out,
     fifo_data      => fifo_write_data,
     fifo_wr_en     => fifo_write_wr_en,
-    fifo_wr_count  => fifo_write_count
+    fifo_wr_count  => fifo_write_count,
+    fifo_watchdog_reset => output_fsm_wd_reset
   );
   
-  output_fsm_reset <= '0';
+  output_fsm_reset <= controller_reset;
   dft_out_I <= dft_out(31 downto 16);
   dft_out_Q <= dft_out(15 downto 0);
   
@@ -686,12 +705,25 @@ begin
       DATA_VALID  => dft_data_valid
     );
     
-    dft_sclr <= '0';
+    dft_sclr <= controller_reset;
     
-    PS_GPIO <= (55 downto 11 => '0', 10 => led_sig, 9 downto 0 => '0');
-    process(dft_fd_out)
+    -- Reset controller
+    
+    reset_controller_I : reset_controller
+        port map (
+          clk                 => bus_clk,
+          input_fsm_wd_reset  => input_fsm_wd_reset,
+          output_fsm_wd_reset => output_fsm_wd_reset,
+          reset               => controller_reset
+        );
+    
+    PS_GPIO <= PS_GPIO_xillybus(55 downto 11) & led_sig & PS_GPIO_xillybus(9 downto 0);
+    process(bus_clk)
       begin
-        if rising_edge(dft_fd_out) then
+        if rising_edge(bus_clk) then
+        if (dft_fd_out /= dft_fd_out_prev) then
+          dft_fd_out_prev <= dft_fd_out_prev;
+          
           if led_cnt /= (led_cnt'range => '0') then 
             led_cnt <= x"ff";
             led_sig <= not led_sig;
@@ -699,6 +731,7 @@ begin
             led_cnt <= led_cnt - '1';
             led_sig <= led_sig;
           end if;
+        end if;
         end if;
       end process;
   

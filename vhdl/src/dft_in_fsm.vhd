@@ -13,7 +13,8 @@ port (
   dft_data : out std_logic_vector(31 downto 0);
   dft_fd_in : out std_logic;
   dft_rffd : in std_logic;
-  dft_data_valid : in std_logic
+  dft_data_valid : in std_logic;
+  fifo_watchdog_reset : out std_logic
 );
 end dft_in_fsm;
 
@@ -26,6 +27,8 @@ signal state : fsm := rst;
 
 signal data_cnt : std_logic_vector(16 downto 0);
 
+signal fifo_cnt_prev : std_logic_vector(9 downto 0);
+
 begin
 
    dft_data <= fifo_data;
@@ -33,6 +36,13 @@ begin
 process(clk)
 begin
   if (clk'event and clk = '1') then
+  
+    -- Watchdog control signal
+    if (fifo_rd_count /= fifo_cnt_prev) then
+       fifo_watchdog_reset <= '1';
+    else
+       fifo_watchdog_reset <= '0';
+    end if;
     
     case state is
         
@@ -78,17 +88,17 @@ begin
                data_cnt <= data_cnt - '1';
                state <= dft_sample;
             else
-			      fifo_rd_en <= '0';
+			   fifo_rd_en <= '0';
                state <= dft_out_wait;
             end if;
 			
 		-- Cekamo dok DFT ne izbaci sve uzorke spektra
 		when dft_out_wait =>
 		
-		   dft_fd_in <= '0';
-			fifo_rd_en <= '0';
+		    dft_fd_in <= '0';
+	        fifo_rd_en <= '0';
 			
-         if (dft_data_valid = '1') then
+            if (dft_data_valid = '1') then
 			   state <= dft_out_wait;
 			else
 			   state <= fifo_dft_wait;
