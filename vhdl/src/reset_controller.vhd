@@ -26,6 +26,9 @@ process(clk)
 begin
 if rising_edge(clk) then
 
+    watchdog_timer <= watchdog_timer;
+    reset_int <= reset_int;
+
     -- WATCHDOG    
     -- Timer reset
     --     ... if input fifo is changing
@@ -39,11 +42,13 @@ if rising_edge(clk) then
     
     -- Watchdog reset signal
     if watchdog_timer = (watchdog_timer'range => '0') then
-       if reset_int = '1' then
-          watchdog_timer <= x"ff";
-       end if;
-       reset_int <= not reset_int;
+       reset_int <= '1';
     end if;    
+    
+    if reset_int = '1' then
+       watchdog_timer <= x"ff";
+       reset_int <= '0';
+    end if;
 
 end if;
 end process;
