@@ -10,8 +10,6 @@
 #define FFT_FD_IN "/dev/xillybus_write_32"
 #define FFT_FD_OUT "/dev/xillybus_read_32"
 
-#define HW_SOLUTION 1
-
 extern void (*ofdm_process_state[STATE_NUM])(ofdm_params *, int);
 
 /**
