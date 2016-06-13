@@ -26,7 +26,7 @@ constant prefix_size : integer := 240;
 constant data_size : integer := 960;
 constant data_threshold : integer := 1024;
 
-type fsm is (rst, cyclic_prefix_wait, fifo_dft_wait, dft_sample);
+type fsm is (rst, cyclic_prefix_wait, fifo_dft_wait, dft_sample, dft_out_wait);
 signal state : fsm := rst;
 
 signal data_cnt : std_logic_vector(16 downto 0);

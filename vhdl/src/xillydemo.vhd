@@ -427,6 +427,8 @@ architecture sample_arch of xillydemo is
   signal led_cnt : std_logic_vector(7 downto 0);
   signal dft_fd_out_prev : std_logic := dft_fd_out;
   signal PS_GPIO_xillybus : std_logic_vector(55 downto 0);
+  signal heartbeat_led_cnt : std_logic_vector(23 downto 0);
+  signal led_heartbeat : std_logic;
   
 begin
   xillybus_ins : xillybus
@@ -717,12 +719,12 @@ begin
           reset               => controller_reset
         );
     
-    PS_GPIO <= PS_GPIO_xillybus(55 downto 11) & led_sig & PS_GPIO_xillybus(9 downto 0);
+    PS_GPIO <= PS_GPIO_xillybus(55 downto 11) & led_sig & led_heartbeat & PS_GPIO_xillybus(8 downto 0);
     process(bus_clk)
       begin
         if rising_edge(bus_clk) then
         if (dft_fd_out /= dft_fd_out_prev) then
-          dft_fd_out_prev <= dft_fd_out_prev;
+          dft_fd_out_prev <= dft_fd_out;
           
           if led_cnt /= (led_cnt'range => '0') then 
             led_cnt <= x"ff";
@@ -732,6 +734,19 @@ begin
             led_sig <= led_sig;
           end if;
         end if;
+        end if;
+      end process;
+      
+      process(bus_clk)
+      begin
+        if rising_edge(bus_clk) then
+           if heartbeat_led_cnt /= (heartbeat_led_cnt'range => '0') then
+             heartbeat_led_cnt <= x"ffffff";
+             led_heartbeat <= not led_heartbeat;
+           else
+             heartbeat_led_cnt <= heartbeat_led_cnt - '1';
+             led_heartbeat <= led_heartbeat;
+           end if;
         end if;
       end process;
   

@@ -27,7 +27,7 @@ begin
 if rising_edge(clk) then
 
     watchdog_timer <= watchdog_timer;
-    reset_int <= reset_int;
+    reset_int <= '0';
 
     -- WATCHDOG    
     -- Timer reset
@@ -43,10 +43,7 @@ if rising_edge(clk) then
     -- Watchdog reset signal
     if watchdog_timer = (watchdog_timer'range => '0') then
        reset_int <= '1';
-    end if;    
-    
-    if reset_int = '1' then
-       watchdog_timer <= x"ff";
+    else
        reset_int <= '0';
     end if;
 

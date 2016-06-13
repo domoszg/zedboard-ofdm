@@ -37,13 +37,6 @@ process(clk)
 begin
 if (clk'event and clk = '1') then
 
-    -- Watchdog control signal
-    if (fifo_wr_count /= fifo_cnt_prev) then
-       fifo_watchdog_reset <= '1';
-    else
-       fifo_watchdog_reset <= '0';
-    end if;
-
    case state is
    
    when rst =>
@@ -107,6 +100,15 @@ if (clk'event and clk = '1') then
    
    if (reset = '1') then
       state <= rst;
+   end if;
+   
+   -- Watchdog control signal
+   if (fifo_wr_count /= fifo_cnt_prev) then
+      fifo_watchdog_reset <= '1';
+      fifo_cnt_prev <= fifo_wr_count;
+   else
+      fifo_watchdog_reset <= '0';
+      fifo_cnt_prev <= fifo_cnt_prev;
    end if;
 
 end if;
